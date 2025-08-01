@@ -16,7 +16,15 @@ if project_root not in sys.path:
 from configs.configs import DataConfig
 
 def extract_answer(text):
+    """
+    Extract the numerical answer from GSM8K solution string
     
+    Args:
+        text: The text string containing the answer
+        
+    Returns:
+        The extracted numerical answer as string, or None if not found
+    """
     patterns =  [
         r"####\s*([0-9,]+(?:\.[0-9]+)?)",  # #### format
         r"The answer is\s*([0-9,]+(?:\.[0-9]+)?)",  # explicit format
@@ -30,17 +38,35 @@ def extract_answer(text):
     return None
 
 def format_gsm8k_prompt(question):
-
+    """
+    Format GSM8K question as a prompt
+    
+    Args:
+        question: The raw question from GSM8K
+        
+    Returns:
+        Formatted prompt string
+    """
     return f"Question: {question}\n\nLet me solve this step by step.\n\n"
 
 def format_gsm8k_completion(question, answer):
-
+    """
+    Format GSM8K question and answer as a complete text
+    
+    Args:
+        question: The question
+        answer: The answer
+        
+    Returns:
+        Complete formatted text
+    """
     prompt = format_gsm8k_prompt(question)
     return f"{prompt}{answer}"
 
 
 class GSM8KDataset:
-
+    """GSM8K dataset handler for GRPO training"""
+    
     def __init__(self, config: DataConfig, tokenizer: PreTrainedTokenizer):
         self.config = config
         self.tokenizer = tokenizer
@@ -54,6 +80,8 @@ class GSM8KDataset:
 
     def load_dataset(self):
 
+        print("🔄 Loading GSM8K dataset...")
+        
         dataset = load_dataset(
             self.config.dataset_name,
             self.config.dataset_config,
@@ -66,8 +94,8 @@ class GSM8KDataset:
         eval_data = dataset[self.config.eval_split]
         self.eval_dataset = self._preprocess_dataset(eval_data, is_training=False)
         
-        print(f"Loaded {len(self.train_dataset)} training samples")
-        print(f"Loaded {len(self.eval_dataset)} evaluation samples")
+        print(f"✅ Loaded {len(self.train_dataset)} training samples")
+        print(f"✅ Loaded {len(self.eval_dataset)} evaluation samples")
         
         return self.train_dataset, self.eval_dataset
 
