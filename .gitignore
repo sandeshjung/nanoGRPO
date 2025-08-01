@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints and metadata
+.ipynb_checkpoints/
+*.ipynb~  # temporary notebook backups
+
+# Output cells in .ipynb (optional, if using nbstripout or similar tools)
+*.nbconvert.ipynb
+
+# Python virtual environments
+env/
+venv/
+.venv/
+develop_env/  # your custom venv name
+
+# VS Code
+.vscode/
+.history/
+
+# PyCharm
+.idea/
+
+# Logs and debug
+*.log
+*.out
+*.bak
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Cache
+*.cache
+.cache/
+__pypackages__/
+
+# Pip wheels
+*.whl
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook metadata (optional: can remove outputs)
+*.nbconvert.ipynb
