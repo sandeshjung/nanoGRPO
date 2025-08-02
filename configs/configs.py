@@ -2,6 +2,25 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 import torch
 
+@dataclass
+class ModelConfig:
+    """Model configuration"""
+    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    model_revision: Optional[str] = None
+    trust_remote_code: bool = True
+    torch_dtype: torch.dtype = torch.bfloat16
+    device_map: str = "auto"
+    
+    # PEFT configuration
+    use_peft: bool = True
+    peft_type: str = "lora"  # "lora" or "adalora"
+    lora_r: int = 64
+    lora_alpha: int = 16
+    lora_dropout: float = 0.05
+    target_modules: list = field(default_factory=lambda: [
+        "q_proj", "k_proj", "v_proj", "o_proj",
+        "gate_proj", "up_proj", "down_proj"
+    ])
 
 @dataclass  
 class DataConfig:
@@ -27,6 +46,7 @@ class DataConfig:
 @dataclass
 class Config:
     """Main configuration class combining all configs"""
+    model: ModelConfig = field(default_factory=ModelConfig)
     data: DataConfig = field(default_factory=DataConfig)
     
     seed: int = 42

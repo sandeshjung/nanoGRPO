@@ -88,11 +88,11 @@ class GSM8KDataset:
             trust_remote_code = True
         )
 
-        train_data = dataset[self.config.train_split]
-        self.train_dataset = self._preprocess_dataset(train_data, is_training = True)
+        train_data = dataset[self.config.train_split] # type: ignore
+        self.train_dataset = self._preprocess_dataset(train_data, is_training = True) # type: ignore
 
-        eval_data = dataset[self.config.eval_split]
-        self.eval_dataset = self._preprocess_dataset(eval_data, is_training=False)
+        eval_data = dataset[self.config.eval_split] # type: ignore
+        self.eval_dataset = self._preprocess_dataset(eval_data, is_training=False) # type: ignore
         
         print(f"✅ Loaded {len(self.train_dataset)} training samples")
         print(f"✅ Loaded {len(self.eval_dataset)} evaluation samples")
@@ -196,7 +196,7 @@ class GSM8KDataset:
             }
         
         return DataLoader(
-            dataset,
+            dataset, # type: ignore
             batch_size=batch_size,
             shuffle=shuffle,
             collate_fn=collate_fn,
