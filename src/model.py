@@ -67,6 +67,104 @@ class GRPOModelWrapper:
 
         return self.model, self.tokenizer
 
+    def setup_peft(self):
+        if not self.config.use_peft:
+            return self.model
+
+        print("Setting up PEFT (LoRA) ...")
+
+        if hasattr(self.model, 'is_loaded_in_8bit') or hasattr(self.model, 'is_loaded_in_4bit'):
+            self.model = prepare_model_for_kbit_training(self.model)
+
+        # create lora config
+        peft_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            inference_mode=False,
+            r = self.config.lora_r,
+            lora_alpha=self.config.lora_alpha,
+            lora_dropout=self.config.lora_dropout,
+            target_modules=self.config.target_modules,
+            bias="none"
+        )
+
+        # Apply peft
+        self.model = get_peft_model(self.model, peft_config) # type: ignore
+
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in self.model.parameters())
+
+        print(f"Trainable parameters: {trainable_params:,} ({100 * trainable_params / total_params:.2f}%)")
+
+        return self.model
+
+    def setup_reference_model(self):
+        print("Setting up reference model ...")
+
+        # load reference model (same as base but frozen)
+        self.ref_model = AutoModelForCausalLM.from_pretrained(
+            self.config.model_name,
+            revision = self.config.model_revision,
+            trust_remote_code = self.config.trust_remote_code,
+            torch_dtype = self.config.torch_dtype,
+            device_map = self.config.device_map,
+        )
+
+        # freeze reference model
+        for param in self.ref_model.parameters():
+            param.requires_grad = False
+
+        self.ref_model.eval()
+
+        print("Reference model setup complete")
+        
+        return self.ref_model
+
+    def generate_completions(self, prompts, num_completions = 4, max_new_tokens = 256, temperature = 0.8, top_p = 0.9):
+
+        self.model.eval() # type: ignore
+
+        all_completions = []
+        all_prompt_lengths = []
+
+        with torch.no_grad():
+            for prompt in prompts:
+                prompt_inputs = self.tokenizer(
+                    prompt,
+                    return_tensors = "pt",
+                    padding = False,
+                    truncation = False
+                ).to(self.model.device) # type: ignore
+
+                prompt_length = prompt_inputs.input_ids.shape[-1]
+                all_prompt_lengths.append(prompt_length)
+
+                # generate multiple
+                completions_for_prompt = []
+
+                for _ in range(num_completions):
+                    with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16):
+                        outputs = self.model.generate(
+                            **prompt_inputs,
+                            max_new_tokens=max_new_tokens,
+                            do_sample=True,
+                            temperature=temperature,
+                            top_p=top_p,
+                            pad_token_id=self.tokenizer.pad_token_id,
+                            eos_token_id=self.tokenizer.eos_token_id,
+                            repetition_penalty=1.1
+                        )
+
+                    generate_ids = outputs[0][prompt_length:]
+                    completion = self.tokenizer.decode(generate_ids, skip_special_tokens=True)
+                    completions_for_prompt.append(completion)
+
+                all_completions.append(completions_for_prompt)
+
+        return {
+            "completions": all_completions,
+            "prompt_lengths": all_prompt_lengths,
+        }
+        
 
 def test_model_loading():
 
@@ -78,8 +176,23 @@ def test_model_loading():
 
     model, tokenizer = model_wrapper.load_model_and_tokenizer()
 
-    print(f"Model type: {model}")
+    model = model_wrapper.setup_peft()
 
+    ref_model = model_wrapper.setup_reference_model()
+
+    test_prompts = ["Question: What is 2 + 2?\n\nLet me solve this step by step.\n\n"]
+    
+    completions = model_wrapper.generate_completions(
+        test_prompts, 
+        num_completions=2,
+        max_new_tokens=50
+    )
+
+    print("Model loading results:")
+    print(f"Model type: {model.config.model_type}")
+    print(f"Tokenizer vocab size: {len(tokenizer)}")
+    print(f"Generated completions: {len(completions['completions'][0])}")
+    print(f"Sample completion: {completions['completions'][0][0][:100]}...")
 
 if __name__ == "__main__":
     test_model_loading()
