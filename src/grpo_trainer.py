@@ -88,7 +88,7 @@ class GRPOTrainer:
         all_input_ids = []
         all_attention_masks = []
 
-        for prompt, prompt_completions in zip(prompts. completions):
+        for prompt, prompt_completions in zip(prompts, completions):
             for completion in prompt_completions:
                 full_text = prompt + completion
                 all_completion_texts.append(full_text)

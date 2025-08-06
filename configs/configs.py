@@ -8,7 +8,7 @@ class ModelConfig:
     model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"
     model_revision: Optional[str] = None
     trust_remote_code: bool = True
-    torch_dtype: torch.dtype = torch.bfloat16
+    torch_dtype: torch.dtype = torch.float16
     device_map: str = "auto"
     
     # PEFT configuration
