@@ -42,12 +42,74 @@ class DataConfig:
     do_sample: bool = True
     top_p: float = 0.9
 
+@dataclass
+class GRPOConfig:
+    """GRPO algorithm configuration"""
+    beta: float = 0.1  # KL penalty coefficient
+    group_size: int = 4  # Number of completions per prompt
+    
+    use_baseline: bool = True
+    baseline_decay: float = 0.95
+    advantage_normalization: str = "group"  # "group", "batch", or "none"
+    
+    # Trust region
+    clip_range: float = 0.2
+    clip_range_vf: Optional[float] = None
+    
+    # Memory optimization
+    chunk_size: int = 64 
+    gradient_checkpointing: bool = True
+    use_mixed_precision: bool = True
+
+@dataclass
+class TrainingConfig:
+    """Training configuration"""
+    # Basic training parameters
+    num_epochs: int = 3
+    per_device_train_batch_size: int = 1  # Small due to memory constraints
+    per_device_eval_batch_size: int = 2
+    gradient_accumulation_steps: int = 8
+    learning_rate: float = 5e-6
+    weight_decay: float = 0.01
+    warmup_steps: int = 100
+    max_grad_norm: float = 1.0
+    
+    # Scheduler
+    lr_scheduler_type: str = "cosine"
+    
+    # Evaluation and logging
+    eval_steps: int = 500
+    save_steps: int = 500
+    logging_steps: int = 10
+    eval_strategy: str = "steps"
+    save_strategy: str = "steps"
+    
+    # Output directories
+    output_dir: str = "./checkpoints"
+    logging_dir: str = "./logs"
+    
+    # Resuming
+    resume_from_checkpoint: Optional[str] = None
+    
+    # Optimization flags
+    dataloader_pin_memory: bool = True
+    dataloader_num_workers: int = 0  # 0 for debugging, increase for production
+    remove_unused_columns: bool = False
+    
+    # Mixed precision
+    fp16: bool = False
+    bf16: bool = True  # Better for modern GPUs
+    
+    # Memory optimization
+    max_memory_per_gpu: Optional[str] = None  # e.g., "10GB"
 
 @dataclass
 class Config:
     """Main configuration class combining all configs"""
     model: ModelConfig = field(default_factory=ModelConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    grpo: GRPOConfig = field(default_factory=GRPOConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
     
     seed: int = 42
     local_rank: int = -1
