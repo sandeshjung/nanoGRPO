@@ -142,7 +142,7 @@ class GRPOModelWrapper:
                 completions_for_prompt = []
 
                 for _ in range(num_completions):
-                    with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16):
+                    with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16):
                         outputs = self.model.generate(
                             **prompt_inputs,
                             max_new_tokens=max_new_tokens,
@@ -164,7 +164,122 @@ class GRPOModelWrapper:
             "completions": all_completions,
             "prompt_lengths": all_prompt_lengths,
         }
+
+    def compute_log_probabilities(self, input_ids, attention_mask, prompt_lengths = None):
+
+        self.model.eval() # type: ignore
         
+        with torch.no_grad():
+            # Forward pass
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+            ) # type: ignore
+            
+            # Get log probabilities
+            logits = outputs.logits  # [batch_size, seq_len, vocab_size]
+            log_probs = torch.log_softmax(logits, dim=-1)  # [batch_size, seq_len, vocab_size]
+            
+            # Get log probs for actual tokens (shift by 1)
+            target_ids = input_ids[:, 1:]  # [batch_size, seq_len-1]
+            log_probs = log_probs[:, :-1, :]  # [batch_size, seq_len-1, vocab_size]
+            
+            # Gather log probs for target tokens
+            token_log_probs = torch.gather(
+                log_probs, 
+                dim=-1, 
+                index=target_ids.unsqueeze(-1)
+            ).squeeze(-1)  # [batch_size, seq_len-1]
+            
+            # Apply attention mask (shifted)
+            attention_mask_shifted = attention_mask[:, 1:]  # [batch_size, seq_len-1]
+            token_log_probs = token_log_probs * attention_mask_shifted
+            
+            # If prompt lengths provided, only compute log probs for completions
+            if prompt_lengths is not None:
+                masked_log_probs = torch.zeros_like(token_log_probs)
+                for i, prompt_len in enumerate(prompt_lengths):
+                    # Only keep log probs after prompt (prompt_len - 1 because of shift)
+                    if prompt_len - 1 < token_log_probs.shape[1]:
+                        masked_log_probs[i, prompt_len-1:] = token_log_probs[i, prompt_len-1:]
+                token_log_probs = masked_log_probs
+            
+            return token_log_probs
+
+    def compute_kl_divergence(self, input_ids, attention_mask, prompt_lengths = None):
+        
+        if self.ref_model is None:
+            return torch.zeros(input_ids.shape[0], device=input_ids.device)
+        
+        # Get log probs from current model
+        current_log_probs = self.compute_log_probabilities(
+            input_ids, attention_mask, prompt_lengths
+        )
+        
+        # Get log probs from reference model
+        with torch.no_grad():
+            ref_outputs = self.ref_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+            )
+            
+            ref_logits = ref_outputs.logits[:, :-1, :]  # [batch_size, seq_len-1, vocab_size]
+            ref_log_probs = torch.log_softmax(ref_logits, dim=-1)
+            
+            target_ids = input_ids[:, 1:]  # [batch_size, seq_len-1]
+            ref_token_log_probs = torch.gather(
+                ref_log_probs,
+                dim=-1,
+                index=target_ids.unsqueeze(-1)
+            ).squeeze(-1)
+            
+            # Apply attention mask
+            attention_mask_shifted = attention_mask[:, 1:]
+            ref_token_log_probs = ref_token_log_probs * attention_mask_shifted
+            
+            # Mask to completion only if prompt lengths provided
+            if prompt_lengths is not None:
+                masked_ref_log_probs = torch.zeros_like(ref_token_log_probs)
+                for i, prompt_len in enumerate(prompt_lengths):
+                    if prompt_len - 1 < ref_token_log_probs.shape[1]:
+                        masked_ref_log_probs[i, prompt_len-1:] = ref_token_log_probs[i, prompt_len-1:]
+                ref_token_log_probs = masked_ref_log_probs
+        
+        # Compute KL divergence: KL(current || ref) = current_log_prob - ref_log_prob
+        kl_div = current_log_probs - ref_token_log_probs
+        
+        # Sum over sequence length (only where attention mask is 1)
+        attention_mask_shifted = attention_mask[:, 1:]
+        if prompt_lengths is not None:
+            # Only sum over completion tokens
+            completion_mask = torch.zeros_like(attention_mask_shifted)
+            for i, prompt_len in enumerate(prompt_lengths):
+                if prompt_len - 1 < completion_mask.shape[1]:
+                    completion_mask[i, prompt_len-1:] = attention_mask_shifted[i, prompt_len-1:]
+            kl_div = (kl_div * completion_mask).sum(dim=-1)
+        else:
+            kl_div = (kl_div * attention_mask_shifted).sum(dim=-1)
+        
+        return kl_div
+
+    def save_model(self, save_path):
+        """Save the model"""
+        if self.config.use_peft:
+            self.model.save_pretrained(save_path)
+        else:
+            self.model.save_pretrained(save_path)
+        self.tokenizer.save_pretrained(save_path)
+        print(f"✅ Model saved to {save_path}")
+    
+    def load_model(self, load_path):
+        """Load the model"""
+        if self.config.use_peft:
+            self.model = PeftModel.from_pretrained(self.model, load_path)
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(load_path)
+        print(f"✅ Model loaded from {load_path}")
 
 def test_model_loading():
 
