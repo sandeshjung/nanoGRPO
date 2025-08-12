@@ -142,7 +142,7 @@ class GRPOModelWrapper:
                 completions_for_prompt = []
 
                 for _ in range(num_completions):
-                    with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16):
+                    with torch.amp.autocast(enabled=True, dtype=torch.float16, device_type="cpu"):
                         outputs = self.model.generate(
                             **prompt_inputs,
                             max_new_tokens=max_new_tokens,
