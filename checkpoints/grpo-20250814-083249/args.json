@@ -1,0 +1,9 @@
+{
+  "config": null,
+  "debug": false,
+  "resume": null,
+  "output_dir": null,
+  "run_name": null,
+  "no_wandb": false,
+  "log_level": "INFO"
+}

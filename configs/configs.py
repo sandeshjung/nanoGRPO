@@ -29,8 +29,8 @@ class DataConfig:
     dataset_config: str = "main"
     train_split: str = "train"
     eval_split: str = "test"
-    max_length: int = 512
-    max_prompt_length: int = 256
+    max_length: int = 256
+    max_prompt_length: int = 128
     
     # Data processing
     num_proc: int = 4
@@ -104,15 +104,59 @@ class TrainingConfig:
     max_memory_per_gpu: Optional[str] = None  # e.g., "10GB"
 
 @dataclass
+class LoggingConfig:
+    """Logging and monitoring configuration"""
+    use_wandb: bool = True
+    wandb_project: str = "tiny-grpo"
+    wandb_entity: Optional[str] = None
+    wandb_run_name: Optional[str] = None
+
+    # Tensorboard
+    use_tensorboard: bool = True
+
+    # Console logging
+    log_level: str = "INFO"
+    report_to: list = field(default_factory=lambda: ["wandb", "tensorboard"])
+
+
+@dataclass
 class Config:
     """Main configuration class combining all configs"""
     model: ModelConfig = field(default_factory=ModelConfig)
     data: DataConfig = field(default_factory=DataConfig)
     grpo: GRPOConfig = field(default_factory=GRPOConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+
     
     seed: int = 42
     local_rank: int = -1
+
+    def __post_init__(self):
+        """Post-initialization validation and adjustments"""
+        # Ensure group size matches completions per prompt
+        if self.grpo.group_size != self.data.num_completions_per_prompt:
+            self.grpo.group_size = self.data.num_completions_per_prompt
+            
+        # Adjust batch size for memory efficiency
+        if self.grpo.group_size > 2 and self.training.per_device_train_batch_size > 1:
+            print(f"Warning: Reducing batch size due to group size {self.grpo.group_size}")
+            self.training.per_device_train_batch_size = 1
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "model": self.model.__dict__,
+            "data": self.data.__dict__,
+            "grpo": self.grpo.__dict__,
+            "training": self.training.__dict__,
+            "logging": self.logging.__dict__,
+            "seed": self.seed,
+            "local_rank": self.local_rank
+        }
+    
+def get_default_config() -> Config:
+    """Get default configuration"""
+    return Config()
 
 def get_config_for_debugging() -> Config:
     """Get configuration optimized for debugging"""
@@ -121,6 +165,13 @@ def get_config_for_debugging() -> Config:
     # Reduce sizes for faster debugging
     config.data.max_length = 256
     config.data.max_prompt_length = 128
+    config.grpo.group_size = 2
     config.data.num_completions_per_prompt = 2
+
+    config.training.num_epochs = 1
+    config.training.eval_steps = 50
+    config.training.save_steps = 50
+    config.training.logging_steps = 5
+    config.logging.use_wandb = False
     
     return config

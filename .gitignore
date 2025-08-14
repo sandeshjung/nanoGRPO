@@ -53,3 +53,6 @@ dmypy.json
 
 # Jupyter Notebook metadata (optional: can remove outputs)
 *.nbconvert.ipynb
+
+
+wandb/
